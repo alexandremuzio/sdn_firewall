@@ -45,3 +45,4 @@ class Firewall(object):
         else:
             rule = (perm, pro_type, '0.0.0.0', -1, '0.0.0.0', port_num)
         self.rules.append(rule)
+        
