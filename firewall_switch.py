@@ -11,11 +11,11 @@ from firewall import Firewall
 RULES_FILE = "firewall_rules.txt"
 
 
-class ExampleSwitch13(app_manager.RyuApp):
+class FirewallSwitch(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
-        super(ExampleSwitch13, self).__init__(*args, **kwargs)
+        super(FirewallSwitch, self).__init__(*args, **kwargs)
         # initialize mac address table.
         self.mac_to_port = {}
 
@@ -32,11 +32,15 @@ class ExampleSwitch13(app_manager.RyuApp):
         # Add firewall rules
         self.add_firewall_rules(datapath, parser)
 
-        # parser.OFPMatch()
-        # # install the table-miss flow entry.
-        # match = parser.OFPMatch()
-        # actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
-        #                                   ofproto.OFPCML_NO_BUFFER)]
+        parser.OFPMatch()
+        # install the table-miss flow entry.
+        match = parser.OFPMatch()
+        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
+                                          ofproto.OFPCML_NO_BUFFER)]
+        inst = [parser.OFPInstructionGotoTable(1)]
+        mod = parser.OFPFlowMod(datapath=datapath, priority=0,
+                                match=match, instructions=inst, table_id=0)
+        datapath.send_msg(mod)
         # self.add_flow(datapath, 1, match, actions)
 
     def add_flow(self, datapath, priority, match, actions):
@@ -47,7 +51,7 @@ class ExampleSwitch13(app_manager.RyuApp):
         inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
                                              actions)]
         mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
-                                match=match, instructions=inst)
+                                match=match, instructions=inst, table_id=1)
         datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -101,41 +105,32 @@ class ExampleSwitch13(app_manager.RyuApp):
         ofproto = datapath.ofproto
 
         for rule in self.firewall.rules:
-            firewall_match = None
-            firewall_actions = None
-
-            # Parse rule object
-            perm = rule[0]
-            pro_type = rule[1]
-            ip_src = rule[2]
-            port_src = rule[3]
-            ip_dst = rule[4]
-            port_dst = rule[5]
-
-            if pro_type == 'IP':
+            if rule['pro_type'] == 'IP':
                 firewall_match = parser.OFPMatch(
-                    ipv4_src=ip_src, ipv4_dst=ip_dst, eth_type=2048)
-            elif pro_type == 'TCP':
+                    ipv4_src=rule['ip_src'], ipv4_dst=rule['ip_dst'], eth_type=2048)
+            elif rule['pro_type'] == 'TCP':
+                if rule['port_src'] > 0:
+                    firewall_match = parser.OFPMatch(
+                        tcp_src=rule['port_src'], eth_type=2048, ip_proto=6)
+                else:
+                    firewall_match = parser.OFPMatch(
+                        tcp_dst=rule['port_dst'], eth_type=2048, ip_proto=6)
+            elif rule['pro_type'] == 'UDP':
                 firewall_match = parser.OFPMatch(
-                    tcp_src=port_src, tcp_dst=port_dst, eth_type=2048, ip_proto=6)
-            elif pro_type == 'UDP':
-                firewall_match = parser.OFPMatch(
-                    udp_src=port_src, udp_dst=port_dst)
+                    udp_src=rule['port_src'], udp_dst=rule['port_dst'])
             else:
                 print("No protocol known")
                 continue
 
-            if perm == "permit":
+            if rule['perm'] == "permit":
+                # Send to next table
                 inst = [parser.OFPInstructionGotoTable(1)]
-                req = parser.OFPFlowMod(datapath=datapath, priority=0,
-                                        match=firewall_match, instructions=inst,
-                                        table_id=0)
-                datapath.send_msg(req)
             else:
                 # Drop
                 inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
                                                      [])]
-                req = parser.OFPFlowMod(datapath=datapath, priority=0,
-                                        match=firewall_match, instructions=inst)
-                datapath.send_msg(req)
-                
+
+            mod = parser.OFPFlowMod(datapath=datapath, priority=2,
+                                    match=firewall_match, instructions=inst,
+                                    table_id=0)
+            datapath.send_msg(mod)

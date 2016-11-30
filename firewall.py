@@ -17,21 +17,22 @@ class Firewall(object):
 
                 # Rule with ips
                 if len(token) == 6:
-                    src_ip = token[3]
-                    dst_ip = token[5]
-                    self.add_ip_rule_(permit, pro_type, src_ip, dst_ip)
+                    ip_src = token[3]
+                    ip_dst = token[5]
+                    self.add_ip_rule_(permit, pro_type, ip_src, ip_dst)
                 else:
                     port_loc = token[2]
                     port_num = int(token[3])
 
                     self.add_port_rule_(permit, pro_type, port_loc, port_num)
-                #print(token)
+                # print(token)
 
-    def add_ip_rule_(self, perm, pro_type, src_ip, dst_ip):
+    def add_ip_rule_(self, perm, pro_type, ip_src, ip_dst):
         """
         Add IP rule to firewall list.
         """
-        rule = (perm, pro_type, src_ip, -1, dst_ip, -1)
+        rule = {'perm': perm, 'pro_type': pro_type, 'ip_src': ip_src,
+                'port_src': -1, 'ip_dst': ip_dst, 'port_dst': -1}
 
         self.rules.append(rule)
 
@@ -41,8 +42,9 @@ class Firewall(object):
         """
         rule = None
         if port_loc == 'src':
-            rule = (perm, pro_type, '0.0.0.0', port_num, '0.0.0.0', -1)
+            rule = {'perm': perm, 'pro_type': pro_type, 'ip_src': '0.0.0.0',
+                    'port_src': port_num, 'ip_dst': '0.0.0.0', 'port_dst': -1}
         else:
-            rule = (perm, pro_type, '0.0.0.0', -1, '0.0.0.0', port_num)
+            rule = {'perm': perm, 'pro_type': pro_type, 'ip_src': '0.0.0.0',
+                    'port_src': -1, 'ip_dst': '0.0.0.0', 'port_dst': port_num}
         self.rules.append(rule)
-        
